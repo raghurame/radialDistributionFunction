@@ -203,6 +203,101 @@ RDF *initializeRDF (RDF *rdf_atomType2, int rdf_nBins, float rdf_binWidth)
 	return rdf_atomType2;
 }
 
+float translatePeriodicDistance (float x1, float x2, float simBoxLength, float newR)
+{
+	if (fabs (x1 - x2) > (float)(simBoxLength / 2))
+	{
+		if (x1 > x2) {
+			newR = x1 - simBoxLength; }
+		else if (x1 < x2) {
+			newR = x1 + simBoxLength; }
+	}
+
+	return newR;
+}
+
+bool checkIfWithinBin (bool withinBin, TRAJECTORY *atoms, int i, int j, int nAtoms, SIMULATION_BOUNDARY boundary, RDF *rdf_atomType2, int k, float rdf_maxdist)
+{
+	float xLength = (boundary.xhi - boundary.xlo), yLength = (boundary.yhi - boundary.ylo), zLength = (boundary.zhi - boundary.zlo);
+	float translatedX, translatedY, translatedZ;
+	float distance;
+
+	int maxTranslateX = ceil (rdf_maxdist / xLength), maxTranslateY = ceil (rdf_maxdist / yLength), maxTranslateZ = ceil (rdf_maxdist / zLength);
+	// int negTranslatedX = -maxTranslateX, negTranslatedY = -maxTranslateY, negTranslatedZ =;
+
+	float newX = translatePeriodicDistance (atoms[i].x, atoms[j].x, xLength, newX), newY = translatePeriodicDistance (atoms[i].y, atoms[j].y, yLength, newY), newZ = translatePeriodicDistance (atoms[i].z, atoms[j].z, zLength, newZ);
+
+	distance = sqrt (
+		(newX - atoms[j].x) * (newX - atoms[j].x) +
+		(newY - atoms[j].y) * (newY - atoms[j].y) +
+		(newZ - atoms[j].z) * (newZ - atoms[j].z)
+		);
+
+	if (distance < rdf_atomType2[k].rhi && distance >= rdf_atomType2[k].rlo)
+	{
+		withinBin = true;
+		return withinBin;
+	}
+	else if (distance < rdf_atomType2[k].rlo)
+	{
+		for (int l = -maxTranslateX; l < maxTranslateX; ++l)
+		{
+			for (int m = -maxTranslateY; m < maxTranslateY; ++m)
+			{
+				for (int n = -maxTranslateZ; n < maxTranslateZ; ++n)
+				{
+					translatedX = newX + (xLength * l);
+					translatedY = newY + (yLength * m);
+					translatedZ = newZ + (zLength * n);
+
+					distance = sqrt (
+						(translatedX - atoms[j].x) * (translatedX - atoms[j].x) +
+						(translatedY - atoms[j].y) * (translatedY - atoms[j].y) +
+						(translatedZ - atoms[j].z) * (translatedZ - atoms[j].z)
+						);
+
+					if (distance < rdf_atomType2[k].rhi && distance >= rdf_atomType2[k].rlo)
+					{
+						withinBin = true;
+						return withinBin;
+					}
+				}
+			}
+		}
+	}
+
+	withinBin = false;
+	return withinBin;
+}
+
+RDF *computeRDF (RDF *rdf_atomType2, TRAJECTORY *atoms, int nAtoms, int rdf_nBins, SIMULATION_BOUNDARY boundary, int atomType1, int atomType2, float rdf_maxdist)
+{
+	bool withinBin;
+
+	for (int k = 0; k < rdf_nBins; ++k)
+	{
+		for (int i = 0; i < nAtoms; ++i)
+		{
+			if (atoms[i].atomType == atomType1)
+			{
+				for (int j = i; j < nAtoms; ++j)
+				{
+					if (atoms[j].atomType == atomType2)
+					{
+						withinBin = checkIfWithinBin (withinBin, atoms, i, j, nAtoms, boundary, rdf_atomType2, k, rdf_maxdist);
+
+						if (withinBin) {
+							rdf_atomType2[k].gofr++; }
+					}
+				}
+			}
+		}
+	}
+
+
+	return rdf_atomType2;
+}
+
 int main(int argc, char const *argv[])
 {
 	if (argc != 6)
@@ -248,6 +343,8 @@ int main(int argc, char const *argv[])
 			density_atomType2 = nAtoms_atomType2 / (boundary.xhi - boundary.xlo) * (boundary.yhi - boundary.ylo) * (boundary.zhi - boundary.zlo);
 			rdf_atomType2 = initializeRDF (rdf_atomType2, rdf_nBins, rdf_binWidth);
 		}
+
+		rdf_atomType2 = computeRDF (rdf_atomType2, atoms, nAtoms, rdf_nBins, boundary, atomType1, atomType2, rdf_maxdist);
 
 		currentTimestep++;
 		file_status = fgetc (file_dump);
