@@ -205,15 +205,19 @@ RDF *initializeRDF (RDF *rdf_atomType2, int rdf_nBins, float rdf_binWidth)
 
 float translatePeriodicDistance (float x1, float x2, float simBoxLength, float newR)
 {
-	if (fabs (x1 - x2) > (float)(simBoxLength / 2))
+	if (fabs (x1 - x2) > (simBoxLength / (float)2))
 	{
-		if (x1 > x2) {
+		if (x1 >= x2) {
 			newR = x1 - simBoxLength; }
 		else if (x1 < x2) {
 			newR = x1 + simBoxLength; }
-	}
 
-	return newR;
+		return newR;
+	}
+	else
+	{
+		return x1;
+	}
 }
 
 bool checkIfWithinBin (bool withinBin, TRAJECTORY *atoms, int i, int j, int nAtoms, SIMULATION_BOUNDARY boundary, RDF *rdf_atomType2, int k, float rdf_maxdist)
@@ -223,7 +227,6 @@ bool checkIfWithinBin (bool withinBin, TRAJECTORY *atoms, int i, int j, int nAto
 	float distance;
 
 	int maxTranslateX = ceil (rdf_maxdist / xLength), maxTranslateY = ceil (rdf_maxdist / yLength), maxTranslateZ = ceil (rdf_maxdist / zLength);
-	// int negTranslatedX = -maxTranslateX, negTranslatedY = -maxTranslateY, negTranslatedZ =;
 
 	float newX = translatePeriodicDistance (atoms[i].x, atoms[j].x, xLength, newX), newY = translatePeriodicDistance (atoms[i].y, atoms[j].y, yLength, newY), newZ = translatePeriodicDistance (atoms[i].z, atoms[j].z, zLength, newZ);
 
@@ -280,10 +283,10 @@ RDF *computeRDF (RDF *rdf_atomType2, TRAJECTORY *atoms, int nAtoms, int rdf_nBin
 		{
 			if (atoms[i].atomType == atomType1)
 			{
-				for (int j = i; j < nAtoms; ++j)
+				for (int j = i + 1; j < nAtoms; ++j)
 				{
 					if (atoms[j].atomType == atomType2)
-					{
+					{				
 						withinBin = checkIfWithinBin (withinBin, atoms, i, j, nAtoms, boundary, rdf_atomType2, k, rdf_maxdist);
 
 						if (withinBin) {
@@ -294,6 +297,31 @@ RDF *computeRDF (RDF *rdf_atomType2, TRAJECTORY *atoms, int nAtoms, int rdf_nBin
 		}
 	}
 
+
+	return rdf_atomType2;
+}
+
+RDF *averageRDF (RDF *rdf_atomType2, int rdf_nBins, int currentTimestep)
+{
+	for (int i = 0; i < rdf_nBins; ++i)
+	{
+		rdf_atomType2[i].gofr /= (float)currentTimestep;
+	}
+
+	return rdf_atomType2;
+}
+
+RDF *normalizeRDF (RDF *rdf_atomType2, int rdf_nBins, float density_atomType2, float rdf_binWidth)
+{
+	for (int i = 0; i < rdf_nBins; ++i)
+	{
+		rdf_atomType2[i].gofr = rdf_atomType2[i].gofr / (4 * 3.14 * rdf_atomType2[i].rlo * rdf_atomType2[i].rlo * rdf_binWidth);
+	}
+
+	for (int i = 0; i < rdf_nBins; ++i)
+	{
+		rdf_atomType2[i].gofr /= rdf_atomType2[rdf_nBins - 1].gofr;
+	}
 
 	return rdf_atomType2;
 }
@@ -340,7 +368,7 @@ int main(int argc, char const *argv[])
 		{
 			nAtoms_atomType2 = countNAtoms_byType (atoms, nAtoms, nAtoms_atomType2, atomType2);
 			rdf_atomType2 = (RDF *) malloc (rdf_nBins * sizeof (RDF));
-			density_atomType2 = nAtoms_atomType2 / (boundary.xhi - boundary.xlo) * (boundary.yhi - boundary.ylo) * (boundary.zhi - boundary.zlo);
+			density_atomType2 = (float)nAtoms_atomType2 / (fabs (boundary.xhi - boundary.xlo) * fabs (boundary.yhi - boundary.ylo) * fabs (boundary.zhi - boundary.zlo));
 			rdf_atomType2 = initializeRDF (rdf_atomType2, rdf_nBins, rdf_binWidth);
 		}
 
@@ -350,6 +378,15 @@ int main(int argc, char const *argv[])
 		file_status = fgetc (file_dump);
 	}
 
+	rdf_atomType2 = averageRDF (rdf_atomType2, rdf_nBins, currentTimestep);
+	rdf_atomType2 = normalizeRDF (rdf_atomType2, rdf_nBins, density_atomType2, rdf_binWidth);
+
+	for (int i = 0; i < rdf_nBins; ++i)
+	{
+		fprintf(stdout, "%f %f %f\n", rdf_atomType2[i].rlo, rdf_atomType2[i].rhi, rdf_atomType2[i].gofr);
+		fflush (stdout);
+		usleep (100000);
+	}
 
 	fclose (file_dump);
 	return 0;
