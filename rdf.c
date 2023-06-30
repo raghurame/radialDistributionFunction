@@ -334,8 +334,9 @@ int main(int argc, char const *argv[])
 		exit (1);
 	}
 
-	FILE *file_dump;
+	FILE *file_dump, *file_rdf;
 	file_dump = fopen (argv[1], "r");
+	file_rdf = fopen ("output.rdf", "w");
 
 	int nAtomEntries, nAtoms = countNAtoms (file_dump, &nAtomEntries), atomType1 = atoi (argv[2]), atomType2 = atoi (argv[3]), file_status;
 	SIMULATION_BOUNDARY boundary;
@@ -383,9 +384,9 @@ int main(int argc, char const *argv[])
 
 	for (int i = 0; i < rdf_nBins; ++i)
 	{
-		fprintf(stdout, "%f %f %f\n", rdf_atomType2[i].rlo, rdf_atomType2[i].rhi, rdf_atomType2[i].gofr);
-		fflush (stdout);
-		usleep (100000);
+		fprintf(file_rdf, "%f %f %f\n", rdf_atomType2[i].rlo, rdf_atomType2[i].rhi, rdf_atomType2[i].gofr);
+		fflush (file_rdf);
+		/*usleep (100000);*/
 	}
 
 	fclose (file_dump);
