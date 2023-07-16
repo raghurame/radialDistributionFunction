@@ -76,8 +76,18 @@ typedef struct orderParameterBins
 	float orderParameter, rlo, rhi, count;
 } ORDERPARAMETER_BINS;
 
-int countNAtoms (FILE *file_dump, int *nAtomEntries)
+int countNAtoms (int *nAtomEntries, const char *inputFileName)
 {
+	char *pipeString;
+	pipeString = (char *) malloc (500 * sizeof (char));
+	FILE *file_dump;
+
+	if (strstr (inputFileName, ".xz")) {
+		snprintf (pipeString, 500, "xzcat %s", inputFileName);
+		file_dump = popen (pipeString, "r"); }
+	else {
+		file_dump = fopen (inputFileName, "r"); }
+
 	int nAtoms, currentAtomID, nAtomsFixed;
 	char lineString[2000];
 	rewind (file_dump);
@@ -87,7 +97,13 @@ int countNAtoms (FILE *file_dump, int *nAtomEntries)
 
 	sscanf (lineString, "%d\n", &nAtoms);
 	(*nAtomEntries) = nAtoms;
-	rewind (file_dump);
+	
+	if (strstr (inputFileName, ".xz")) {
+		pclose (file_dump);
+		file_dump = popen (pipeString, "r"); }
+	else {
+		rewind (file_dump); }
+
 	nAtomsFixed = nAtoms;
 
 	for (int i = 0; i < 9; ++i) {
@@ -101,6 +117,13 @@ int countNAtoms (FILE *file_dump, int *nAtomEntries)
 		if (currentAtomID > nAtoms) {
 			nAtomsFixed = currentAtomID; }
 	}
+
+	printf("Number of atom entries in the dump file: %d\nTotal number of atoms present in the simulation: %d\n\n", nAtoms, nAtomsFixed);
+
+	if (strstr (inputFileName, ".xz")) {
+		pclose (file_dump); }
+	else {
+		fclose (file_dump); }
 
 	return nAtomsFixed;
 }
@@ -335,10 +358,25 @@ int main(int argc, char const *argv[])
 	}
 
 	FILE *file_dump, *file_rdf;
-	file_dump = fopen (argv[1], "r");
+	char *pipeString;
+	pipeString = (char *) malloc (500 * sizeof (char));
+
+	if (strstr (argv[1], ".xz")) {
+		snprintf (pipeString, 500, "xzcat %s", argv[1]);
+		file_dump = popen (pipeString, "r"); }
+	else {
+		file_dump = fopen (argv[1], "r"); }
+
 	file_rdf = fopen ("output.rdf", "w");
 
-	int nAtomEntries, nAtoms = countNAtoms (file_dump, &nAtomEntries), atomType1 = atoi (argv[2]), atomType2 = atoi (argv[3]), file_status;
+	int nAtomEntries, nAtoms = countNAtoms (&nAtomEntries, argv[1]), atomType1 = atoi (argv[2]), atomType2 = atoi (argv[3]), file_status;
+
+	if (strstr (argv[1], ".xz")) {
+		pclose (file_dump);
+		file_dump = popen (pipeString, "r"); }
+	else {
+		rewind (file_dump); }
+
 	SIMULATION_BOUNDARY boundary;
 	boundary = readDumpBoundary (file_dump, boundary);
 
@@ -348,7 +386,12 @@ int main(int argc, char const *argv[])
 
 	atoms = initializeAtoms (atoms, nAtoms);
 
-	rewind (file_dump);
+	if (strstr (argv[1], ".xz")) {
+		pclose (file_dump);
+		file_dump = popen (pipeString, "r"); }
+	else {
+		rewind (file_dump); }
+
 	file_status = fgetc (file_dump);
 
 	float rdf_maxdist = atof (argv[4]), rdf_binWidth = atof (argv[5]);
