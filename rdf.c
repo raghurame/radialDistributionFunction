@@ -8,7 +8,7 @@
 
 typedef struct trajectory
 {
-	int atomID, atomType, molType, ix, iy, iz;
+	int atomID, atomType, molType, molID, ix, iy, iz;
 	float x, y, z;
 	int isEndGroup;
 } TRAJECTORY;
@@ -189,7 +189,12 @@ TRAJECTORY *readTimestep (FILE *file_dump, TRAJECTORY *atoms, int nAtomEntries, 
 	{
 		fgets (lineString, 2000, file_dump);
 		sscanf (lineString, "%d\n", &currentAtomID);
-		sscanf (lineString, "%d %d %f %f %f %d %d %d\n", &atoms[currentAtomID - 1].atomID, &atoms[currentAtomID - 1].atomType, &atoms[currentAtomID - 1].x, &atoms[currentAtomID - 1].y, &atoms[currentAtomID - 1].z, &atoms[currentAtomID - 1].ix, &atoms[currentAtomID - 1].iy, &atoms[currentAtomID - 1].iz);
+
+		if (currentAtomID > 0)
+		{
+			sscanf (lineString, "%d %d %d %d %f %f %f %d %d %d\n", &atoms[currentAtomID - 1].atomID, &atoms[currentAtomID - 1].atomType, &atoms[currentAtomID - 1].molID, &atoms[currentAtomID - 1].molType, &atoms[currentAtomID - 1].x, &atoms[currentAtomID - 1].y, &atoms[currentAtomID - 1].z, &atoms[currentAtomID - 1].ix, &atoms[currentAtomID - 1].iy, &atoms[currentAtomID - 1].iz);
+		}
+
 		atoms[currentAtomID - 1].isEndGroup = 0;
 	}
 
@@ -249,7 +254,7 @@ bool checkIfWithinBin (bool withinBin, TRAJECTORY *atoms, int i, int j, int nAto
 	float translatedX, translatedY, translatedZ;
 	float distance;
 
-	int maxTranslateX = ceil (rdf_maxdist / xLength), maxTranslateY = ceil (rdf_maxdist / yLength), maxTranslateZ = ceil (rdf_maxdist / zLength);
+	int maxTranslateX = ceil (rdf_maxdist / xLength) + 2, maxTranslateY = ceil (rdf_maxdist / yLength) + 2, maxTranslateZ = ceil (rdf_maxdist / zLength) + 2;
 
 	float newX = translatePeriodicDistance (atoms[i].x, atoms[j].x, xLength, newX), newY = translatePeriodicDistance (atoms[i].y, atoms[j].y, yLength, newY), newZ = translatePeriodicDistance (atoms[i].z, atoms[j].z, zLength, newZ);
 
@@ -309,11 +314,14 @@ RDF *computeRDF (RDF *rdf_atomType2, TRAJECTORY *atoms, int nAtoms, int rdf_nBin
 				for (int j = i + 1; j < nAtoms; ++j)
 				{
 					if (atoms[j].atomType == atomType2)
-					{				
-						withinBin = checkIfWithinBin (withinBin, atoms, i, j, nAtoms, boundary, rdf_atomType2, k, rdf_maxdist);
+					{
+						if (atoms[i].molID != atoms[j].molID)
+						{
+							withinBin = checkIfWithinBin (withinBin, atoms, i, j, nAtoms, boundary, rdf_atomType2, k, rdf_maxdist);
 
-						if (withinBin) {
-							rdf_atomType2[k].gofr++; }
+							if (withinBin) {
+								rdf_atomType2[k].gofr++; }
+						}
 					}
 				}
 			}
