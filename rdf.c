@@ -193,6 +193,7 @@ TRAJECTORY *readTimestep (FILE *file_dump, TRAJECTORY *atoms, int nAtomEntries, 
 		if (currentAtomID > 0)
 		{
 			sscanf (lineString, "%d %d %d %d %f %f %f %d %d %d\n", &atoms[currentAtomID - 1].atomID, &atoms[currentAtomID - 1].atomType, &atoms[currentAtomID - 1].molID, &atoms[currentAtomID - 1].molType, &atoms[currentAtomID - 1].x, &atoms[currentAtomID - 1].y, &atoms[currentAtomID - 1].z, &atoms[currentAtomID - 1].ix, &atoms[currentAtomID - 1].iy, &atoms[currentAtomID - 1].iz);
+			// sscanf (lineString, "%d %d %f %f %f %d %d %d\n", &atoms[currentAtomID - 1].atomID, &atoms[currentAtomID - 1].atomType, &atoms[currentAtomID - 1].x, &atoms[currentAtomID - 1].y, &atoms[currentAtomID - 1].z, &atoms[currentAtomID - 1].ix, &atoms[currentAtomID - 1].iy, &atoms[currentAtomID - 1].iz);
 		}
 
 		atoms[currentAtomID - 1].isEndGroup = 0;
@@ -254,15 +255,21 @@ bool checkIfWithinBin (bool withinBin, TRAJECTORY *atoms, int i, int j, int nAto
 	float translatedX, translatedY, translatedZ;
 	float distance;
 
-	int maxTranslateX = ceil (rdf_maxdist / xLength) + 2, maxTranslateY = ceil (rdf_maxdist / yLength) + 2, maxTranslateZ = ceil (rdf_maxdist / zLength) + 2;
+	int maxTranslateX = ceil (rdf_maxdist / xLength) + 1, maxTranslateY = ceil (rdf_maxdist / yLength) + 1, maxTranslateZ = ceil (rdf_maxdist / zLength) + 1;
 
 	float newX = translatePeriodicDistance (atoms[i].x, atoms[j].x, xLength, newX), newY = translatePeriodicDistance (atoms[i].y, atoms[j].y, yLength, newY), newZ = translatePeriodicDistance (atoms[i].z, atoms[j].z, zLength, newZ);
 
-	distance = sqrt (
-		(newX - atoms[j].x) * (newX - atoms[j].x) +
-		(newY - atoms[j].y) * (newY - atoms[j].y) +
-		(newZ - atoms[j].z) * (newZ - atoms[j].z)
-		);
+	if (atoms[i].x == 0 && atoms[i].y == 0 && atoms[i].z == 0) {
+		distance = 0; }
+	else
+	{
+		distance = sqrt (
+			(newX - atoms[j].x) * (newX - atoms[j].x) +
+			(newY - atoms[j].y) * (newY - atoms[j].y) +
+			(newZ - atoms[j].z) * (newZ - atoms[j].z)
+			);
+	}
+
 
 	if (distance < rdf_atomType2[k].rhi && distance >= rdf_atomType2[k].rlo)
 	{
@@ -287,7 +294,7 @@ bool checkIfWithinBin (bool withinBin, TRAJECTORY *atoms, int i, int j, int nAto
 						(translatedZ - atoms[j].z) * (translatedZ - atoms[j].z)
 						);
 
-					if (distance < rdf_atomType2[k].rhi && distance >= rdf_atomType2[k].rlo)
+					if (distance < rdf_atomType2[k].rhi && distance >= rdf_atomType2[k].rlo && distance != 0.0)
 					{
 						withinBin = true;
 						return withinBin;
@@ -328,7 +335,6 @@ RDF *computeRDF (RDF *rdf_atomType2, TRAJECTORY *atoms, int nAtoms, int rdf_nBin
 		}
 	}
 
-
 	return rdf_atomType2;
 }
 
@@ -346,12 +352,7 @@ RDF *normalizeRDF (RDF *rdf_atomType2, int rdf_nBins, float density_atomType2, f
 {
 	for (int i = 0; i < rdf_nBins; ++i)
 	{
-		rdf_atomType2[i].gofr = rdf_atomType2[i].gofr / (4 * 3.14 * rdf_atomType2[i].rlo * rdf_atomType2[i].rlo * rdf_binWidth);
-	}
-
-	for (int i = 0; i < rdf_nBins; ++i)
-	{
-		rdf_atomType2[i].gofr /= rdf_atomType2[rdf_nBins - 1].gofr;
+		rdf_atomType2[i].gofr = rdf_atomType2[i].gofr * 3 / (4 * 3.14 * (rdf_atomType2[i].rhi * rdf_atomType2[i].rhi * rdf_atomType2[i].rhi - rdf_atomType2[i].rlo * rdf_atomType2[i].rlo * rdf_atomType2[i].rlo));
 	}
 
 	return rdf_atomType2;
@@ -375,7 +376,10 @@ int main(int argc, char const *argv[])
 	else {
 		file_dump = fopen (argv[1], "r"); }
 
-	file_rdf = fopen ("output.rdf", "w");
+	char *outputFilename;
+	outputFilename = (char *) malloc (1000 * sizeof (char));
+	snprintf (outputFilename, 1000, "%s_%d_%d.rdf", argv[1], atoi (argv[2]), atoi (argv[3]));
+	file_rdf = fopen (outputFilename, "w");
 
 	int nAtomEntries, nAtoms = countNAtoms (&nAtomEntries, argv[1]), atomType1 = atoi (argv[2]), atomType2 = atoi (argv[3]), file_status;
 
@@ -406,7 +410,7 @@ int main(int argc, char const *argv[])
 	int rdf_nBins = ceil (rdf_maxdist / rdf_binWidth);
 	RDF *rdf_atomType2;
 
-	int currentTimestep = 0, nAtoms_atomType2;
+	int currentTimestep = 0, nAtoms_atomType1, nAtoms_atomType2;
 	float density_atomType2;
 
 	while (file_status != EOF)
@@ -418,7 +422,9 @@ int main(int argc, char const *argv[])
 
 		if (currentTimestep == 0)
 		{
+			nAtoms_atomType1 = countNAtoms_byType (atoms, nAtoms, nAtoms_atomType1, atomType1);
 			nAtoms_atomType2 = countNAtoms_byType (atoms, nAtoms, nAtoms_atomType2, atomType2);
+			nAtoms_atomType2 *= nAtoms_atomType1 / 2;
 			rdf_atomType2 = (RDF *) malloc (rdf_nBins * sizeof (RDF));
 			density_atomType2 = (float)nAtoms_atomType2 / (fabs (boundary.xhi - boundary.xlo) * fabs (boundary.yhi - boundary.ylo) * fabs (boundary.zhi - boundary.zlo));
 			rdf_atomType2 = initializeRDF (rdf_atomType2, rdf_nBins, rdf_binWidth);
@@ -433,13 +439,16 @@ int main(int argc, char const *argv[])
 	rdf_atomType2 = averageRDF (rdf_atomType2, rdf_nBins, currentTimestep);
 	rdf_atomType2 = normalizeRDF (rdf_atomType2, rdf_nBins, density_atomType2, rdf_binWidth);
 
+	printf("density_atomType2: %f\n nAtoms_atomType2: %d\n xLength: %f\n yLength: %f\n zLength: %f\n", density_atomType2, fabs (boundary.xhi - boundary.xlo), fabs (boundary.yhi - boundary.ylo), fabs (boundary.zhi - boundary.zlo));
+
 	for (int i = 0; i < rdf_nBins; ++i)
 	{
-		fprintf(file_rdf, "%f %f %f\n", rdf_atomType2[i].rlo, rdf_atomType2[i].rhi, rdf_atomType2[i].gofr);
+		fprintf(file_rdf, "%f %f %f %f\n", rdf_atomType2[i].rlo, rdf_atomType2[i].rhi, rdf_atomType2[i].gofr, rdf_atomType2[i].gofr/density_atomType2);
 		fflush (file_rdf);
-		/*usleep (100000);*/
+		// usleep (100000);
 	}
 
 	fclose (file_dump);
+	fclose (file_rdf);
 	return 0;
 }
